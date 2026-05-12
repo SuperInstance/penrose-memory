@@ -1,0 +1,13 @@
+[package]
+name = "penrose-memory"
+version = "0.1.0"
+edition = "2021"
+description = "Aperiodic memory palace for AI agents. Navigate memories by distance + direction on a Penrose floor."
+license = "MIT"
+repository = "https://github.com/SuperInstance/penrose-memory"
+keywords = ["penrose", "memory", "ai", "tiling", "aperiodic"]
+categories = ["data-structures", "science"]
+
+[dependencies]
+
+[workspace]
