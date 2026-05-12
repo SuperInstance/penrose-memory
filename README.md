@@ -2,6 +2,16 @@
 
 Aperiodic memory palace for AI agents. Navigate memories by **distance + direction** on a Penrose floor.
 
+## How It Works
+
+1. **Project**: Embeddings → 2D Penrose coordinates via golden-ratio hashing
+2. **Store**: Place memories on the floor at projected coordinates
+3. **Recall**: Dead-reckon from query toward stored memories
+4. **Navigate**: Walk from any tile by distance + heading
+5. **Consolidate**: Merge nearby memories using golden hierarchy (φ^k)
+
+The Fibonacci word determines tile bits (thick:thin → 1/φ). Matching rules verify valid positions. 3-coloring enables sharding.
+
 ## Install
 
 ```toml
@@ -9,57 +19,85 @@ Aperiodic memory palace for AI agents. Navigate memories by **distance + directi
 penrose-memory = "0.1.0"
 ```
 
-## Quick Start
-
-```rust
-use penrose_memory::{PenroseFloor, Step};
-
-// Create a memory floor
-let mut floor = PenroseFloor::new()
-    .at(0.0, 0.0)    // start position
-    .facing(0.0);     // facing east
-
-// Store memories
-floor.store_here(0xDEADBEEF);
-floor.store_at(10.0, 5.0, 0xCAFEBABE);
-
-// Navigate by dead reckoning
-let steps = vec![Step::new(10.0, 0.46)]; // distance + heading
-let read = floor.walk(&steps);
-println!("Confidence: {}", read.confidence);
-
-// Spline directly to a target
-let read = floor.spline_to((10.0, 5.0), 5);
-
-// Deflate (consolidate nearby memories)
-floor.deflate((0.0, 0.0), 3.0);
+Python:
+```bash
+pip install penrose-memory
 ```
 
-## Why Penrose?
+## Quick Start (Rust)
 
-| Vector DB | Penrose Floor |
-|---|---|
-| All neighborhoods identical | Every neighborhood unique |
-| Scalar distance retrieval | Bragg peak retrieval (structured) |
-| Hash collisions possible | Zero collisions (matching rules) |
-| Artificial hierarchy | Golden hierarchy (φ^k) |
-| Fixed context window | Self-similar (grows with zoom) |
+```rust
+use penrose_memory::PenroseMemory;
 
-## Navigation Primitives
+let mut pm = PenroseMemory::new(1536);
+
+// Store an embedding with content
+let id = pm.store(&embedding, 42);
+
+// Recall by nearest embedding
+let results = pm.recall(&query, 5);
+for r in &results {
+    println!("id={} conf={:.3} dist={:.3}", r.tile_id, r.confidence, r.distance);
+}
+
+// Navigate from a tile
+let nearby = pm.navigate(id, 2.5, std::f64::consts::FRAC_PI_4);
+
+// Consolidate old memories
+pm.consolidate();
+```
+
+## Quick Start (Python)
+
+```python
+from penrose_memory import PenroseMemory
+
+pm = PenroseMemory(embedding_dim=1536)
+
+# Store text with embedding
+tile_id = pm.store("hello world", embedding)
+
+# Recall by query embedding
+results = pm.recall(query_embedding, max_steps=5)
+for r in results:
+    print(r["text"], r["confidence"], r["distance"])
+
+# Navigate from a tile
+nearby = pm.navigate(tile_id, distance=2.5, heading=0.785)
+
+# Consolidate
+removed = pm.consolidate()
+```
+
+## API
+
+### Rust
 
 | Method | Description |
-|---|---|
-| `walk(steps)` | Dead reckoning: read one bit per step |
-| `spline_to(target, n)` | Straight-line walk to target |
-| `tack(deltas, dist)` | Zigzag like a sailboat |
-| `stretch(stretches, heading)` | Varying distances at constant heading |
-| `deflate(center, radius)` | Consolidate nearby memories (dream) |
+|--------|-------------|
+| `new(dim)` | Create with embedding dimension |
+| `store(&[f64], u64) -> u64` | Store embedding + content, returns tile_id |
+| `recall(&[f64], steps) -> Vec<RecallResult>` | Recall by dead reckoning |
+| `navigate(id, dist, heading) -> Vec<u64>` | Navigate from tile |
+| `consolidate()` | Merge nearby memories |
+| `len() -> usize` | Memory count |
 
-## The Math
+### Python
 
-The floor uses the **Fibonacci word** — the same sequence that determines thick/thin tiles in a Penrose tiling. The ratio of thick to thin converges to 1/φ ≈ 0.618. The pattern is deterministic: once you see the local pattern lock in, there's only one way it can continue.
+| Method | Description |
+|--------|-------------|
+| `__init__(embedding_dim=1536)` | Create with embedding dimension |
+| `store(text, embedding) -> int` | Store text + embedding |
+| `recall(query_embedding, max_steps=5) -> list` | Recall by dead reckoning |
+| `navigate(tile_id, distance, heading) -> list` | Navigate from tile |
+| `consolidate() -> int` | Merge nearby memories |
+| `__len__()` | Memory count |
 
-This is **dead reckoning**: the ancient navigator's technique. No GPS. No absolute coordinates. Just "how far" and "which way." The floor pattern confirms you're on the right path.
+## Tests
+
+**Rust**: 15 tests covering roundtrip, aperiodicity, Fibonacci ratio, 3-coloring, consolidation, navigation, large embeddings, confidence decay, and more.
+
+**Python**: 10 tests covering the same core functionality.
 
 ## License
 
