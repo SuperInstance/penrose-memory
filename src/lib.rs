@@ -23,6 +23,9 @@
 //! assert_eq!(results[0].content, 42);
 //! ```
 
+pub mod cut_and_project;
+pub mod compiler;
+
 const PHI: f64 = 1.618033988749895;
 const INV_PHI: f64 = 0.618033988749895;
 const GOLDEN_ANGLE: f64 = 2.399963229728653; // π(3 − √5)
