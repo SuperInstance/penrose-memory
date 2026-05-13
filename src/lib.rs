@@ -25,6 +25,7 @@
 
 pub mod cut_and_project;
 pub mod compiler;
+pub mod tensor_tile;
 
 const PHI: f64 = 1.618033988749895;
 const INV_PHI: f64 = 0.618033988749895;
