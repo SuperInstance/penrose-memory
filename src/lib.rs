@@ -31,6 +31,49 @@ const PHI: f64 = 1.618033988749895;
 const INV_PHI: f64 = 0.618033988749895;
 const GOLDEN_ANGLE: f64 = 2.399963229728653; // π(3 − √5)
 
+/// Tile lifecycle states — mirrors PLATO v3.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum TileLifecycle {
+    Active,
+    Superseded,
+    Retracted,
+}
+
+impl std::fmt::Display for TileLifecycle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TileLifecycle::Active => write!(f, "Active"),
+            TileLifecycle::Superseded => write!(f, "Superseded"),
+            TileLifecycle::Retracted => write!(f, "Retracted"),
+        }
+    }
+}
+
+/// Lamport clock for causal ordering across agents.
+#[derive(Debug, Clone)]
+pub struct LamportClock {
+    time: u64,
+}
+
+impl LamportClock {
+    pub fn new() -> Self { Self { time: 0 } }
+    pub fn tick(&mut self) -> u64 { self.time += 1; self.time }
+    pub fn merge(&mut self, remote: u64) -> u64 { self.time = self.time.max(remote) + 1; self.time }
+    pub fn now(&self) -> u64 { self.time }
+}
+
+/// A prediction about where a memory will be found.
+#[derive(Debug, Clone)]
+pub struct MemoryPrediction {
+    pub predicted_tile_id: Option<u64>,
+    pub predicted_heading: f64,
+    pub predicted_distance: f64,
+    pub lamport: u64,
+    pub confirmed: bool,
+    pub actual_tile_id: Option<u64>,
+    pub actual_distance: Option<f64>,
+}
+
 /// Result of a recall operation.
 #[derive(Debug, Clone)]
 pub struct RecallResult {
@@ -51,6 +94,8 @@ struct Tile {
     y: f64,
     color: u8,     // 3-coloring: 0, 1, or 2
     level: u32,    // golden hierarchy level
+    lifecycle: TileLifecycle,
+    lamport: u64,
 }
 
 /// Aperiodic memory palace navigated by dead reckoning.
@@ -159,6 +204,8 @@ impl PenroseMemory {
             y,
             color,
             level: 0,
+            lifecycle: TileLifecycle::Active,
+            lamport: 0,
         });
 
         id
@@ -179,7 +226,9 @@ impl PenroseMemory {
 
         let (qx, qy) = self.project_to_2d(query);
 
-        let mut results: Vec<RecallResult> = self.tiles.iter().map(|tile| {
+        let mut results: Vec<RecallResult> = self.tiles.iter()
+            .filter(|t| t.lifecycle == TileLifecycle::Active)
+            .map(|tile| {
             let dist = Self::euclidean_distance(qx, qy, tile.x, tile.y);
             let heading = Self::heading_to(qx, qy, tile.x, tile.y);
 
@@ -306,6 +355,8 @@ impl PenroseMemory {
                     y: cluster_y,
                     color: self.three_color(qx, qy),
                     level: 1,
+                    lifecycle: TileLifecycle::Active,
+                    lamport: 0,
                 });
                 self.next_id += 1;
             }
@@ -351,6 +402,96 @@ impl PenroseMemory {
     /// Check if the memory is empty.
     pub fn is_empty(&self) -> bool {
         self.tiles.is_empty()
+    }
+
+    // ── Tile Lifecycle (v1.1.0) ─────────────────────────────
+
+    /// Supersede a tile — mark old as Superseded, return its content.
+    pub fn supersede_tile(&mut self, tile_id: u64) -> Option<u64> {
+        let tile = self.tiles.iter_mut().find(|t| t.tile_id == tile_id)?;
+        if tile.lifecycle != TileLifecycle::Active {
+            return None;
+        }
+        tile.lifecycle = TileLifecycle::Superseded;
+        Some(tile.content)
+    }
+
+    /// Retract a tile — mark as Retracted with reason.
+    pub fn retract_tile(&mut self, tile_id: u64) -> bool {
+        if let Some(tile) = self.tiles.iter_mut().find(|t| t.tile_id == tile_id) {
+            if tile.lifecycle == TileLifecycle::Active {
+                tile.lifecycle = TileLifecycle::Retracted;
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Get only active tile IDs.
+    pub fn active_tile_ids(&self) -> Vec<u64> {
+        self.tiles.iter()
+            .filter(|t| t.lifecycle == TileLifecycle::Active)
+            .map(|t| t.tile_id)
+            .collect()
+    }
+
+    /// Count tiles by lifecycle state.
+    pub fn lifecycle_stats(&self) -> (usize, usize, usize) {
+        let active = self.tiles.iter().filter(|t| t.lifecycle == TileLifecycle::Active).count();
+        let superseded = self.tiles.iter().filter(|t| t.lifecycle == TileLifecycle::Superseded).count();
+        let retracted = self.tiles.iter().filter(|t| t.lifecycle == TileLifecycle::Retracted).count();
+        (active, superseded, retracted)
+    }
+
+    // ── Simulation-First Predictions (v1.1.0) ──────────────
+
+    /// Predict where a memory will be found before walking there.
+    /// Uses the same projection as recall but without executing the walk.
+    pub fn predict_recall(&self, query: &[f64], clock: &mut LamportClock) -> MemoryPrediction {
+        let (qx, qy) = self.project_to_2d(query);
+
+        // Find closest active tile without walking
+        let best = self.tiles.iter()
+            .filter(|t| t.lifecycle == TileLifecycle::Active)
+            .min_by(|a, b| {
+                let da = Self::euclidean_distance(qx, qy, a.x, a.y);
+                let db = Self::euclidean_distance(qx, qy, b.x, b.y);
+                da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
+            });
+
+        match best {
+            Some(tile) => MemoryPrediction {
+                predicted_tile_id: Some(tile.tile_id),
+                predicted_heading: Self::heading_to(qx, qy, tile.x, tile.y),
+                predicted_distance: Self::euclidean_distance(qx, qy, tile.x, tile.y),
+                lamport: clock.tick(),
+                confirmed: false,
+                actual_tile_id: None,
+                actual_distance: None,
+            },
+            None => MemoryPrediction {
+                predicted_tile_id: None,
+                predicted_heading: 0.0,
+                predicted_distance: f64::MAX,
+                lamport: clock.tick(),
+                confirmed: false,
+                actual_tile_id: None,
+                actual_distance: None,
+            },
+        }
+    }
+
+    /// Confirm a prediction against actual recall results.
+    pub fn confirm_prediction(&self, prediction: &mut MemoryPrediction, actual: &[RecallResult]) -> bool {
+        if let (Some(pred_id), Some(first)) = (prediction.predicted_tile_id, actual.first()) {
+            prediction.actual_tile_id = Some(first.tile_id);
+            prediction.actual_distance = Some(first.distance);
+            prediction.confirmed = pred_id == first.tile_id;
+            prediction.confirmed
+        } else {
+            prediction.confirmed = actual.is_empty() && prediction.predicted_tile_id.is_none();
+            prediction.confirmed
+        }
     }
 }
 
@@ -568,9 +709,98 @@ mod tests {
         pm.store(&[1.0, 0.0, 0.0, 0.0], 10);
         pm.store(&[0.0, 0.0, 0.0, 1.0], 20);
 
-        // Query close to the first embedding
         let results = pm.recall(&[0.9, 0.0, 0.0, 0.0], 5);
         assert!(!results.is_empty());
         assert_eq!(results[0].content, 10, "Should find closest match first");
+    }
+
+    // ── v1.1.0: Tile lifecycle tests ───────────────────────
+
+    #[test]
+    fn test_new_tile_is_active() {
+        let mut pm = PenroseMemory::new(4);
+        pm.store(&[1.0, 2.0, 3.0, 4.0], 42);
+        let ids = pm.active_tile_ids();
+        assert_eq!(ids.len(), 1);
+        let (active, sup, ret) = pm.lifecycle_stats();
+        assert_eq!(active, 1);
+        assert_eq!(sup, 0);
+        assert_eq!(ret, 0);
+    }
+
+    #[test]
+    fn test_supersede_excludes_from_recall() {
+        let mut pm = PenroseMemory::new(4);
+        let id1 = pm.store(&[1.0, 0.0, 0.0, 0.0], 10);
+        let _id2 = pm.store(&[0.9, 0.0, 0.0, 0.0], 20);
+
+        pm.supersede_tile(id1);
+
+        let results = pm.recall(&[1.0, 0.0, 0.0, 0.0], 3);
+        assert!(!results.iter().any(|r| r.tile_id == id1), "Superseded tile should not appear in recall");
+
+        let (active, sup, _) = pm.lifecycle_stats();
+        assert_eq!(active, 1);
+        assert_eq!(sup, 1);
+    }
+
+    #[test]
+    fn test_retract_excludes_from_recall() {
+        let mut pm = PenroseMemory::new(4);
+        let id = pm.store(&[1.0, 0.0, 0.0, 0.0], 10);
+
+        let retracted = pm.retract_tile(id);
+        assert!(retracted);
+
+        let results = pm.recall(&[1.0, 0.0, 0.0, 0.0], 3);
+        assert!(results.is_empty(), "Retracted tile should not appear in recall");
+    }
+
+    #[test]
+    fn test_cannot_supersede_retracted() {
+        let mut pm = PenroseMemory::new(4);
+        let id = pm.store(&[1.0, 2.0, 3.0, 4.0], 42);
+        pm.retract_tile(id);
+        let result = pm.supersede_tile(id);
+        assert!(result.is_none(), "Cannot supersede a retracted tile");
+    }
+
+    // ── v1.1.0: Simulation-first prediction tests ─────────
+
+    #[test]
+    fn test_predict_recall_finds_tile() {
+        let mut pm = PenroseMemory::new(4);
+        let id = pm.store(&[1.0, 2.0, 3.0, 4.0], 42);
+        let mut clock = LamportClock::new();
+
+        let pred = pm.predict_recall(&[1.0, 2.0, 3.0, 4.0], &mut clock);
+        assert_eq!(pred.predicted_tile_id, Some(id));
+        assert!(pred.predicted_distance < 0.01);
+        assert_eq!(pred.lamport, 1);
+        assert!(!pred.confirmed);
+    }
+
+    #[test]
+    fn test_confirm_prediction_matches() {
+        let mut pm = PenroseMemory::new(4);
+        let _id = pm.store(&[1.0, 2.0, 3.0, 4.0], 42);
+        let mut clock = LamportClock::new();
+
+        let mut pred = pm.predict_recall(&[1.0, 2.0, 3.0, 4.0], &mut clock);
+        let actual = pm.recall(&[1.0, 2.0, 3.0, 4.0], 3);
+
+        let confirmed = pm.confirm_prediction(&mut pred, &actual);
+        assert!(confirmed, "Prediction should match actual recall");
+        assert!(pred.confirmed);
+    }
+
+    #[test]
+    fn test_lamport_clock_monotonic() {
+        let mut clock = LamportClock::new();
+        let t1 = clock.tick();
+        let t2 = clock.tick();
+        let t3 = clock.merge(100); // max(2, 100) + 1 = 101
+        assert!(t1 < t2);
+        assert_eq!(t3, 101);
     }
 }

@@ -1,8 +1,8 @@
 [package]
 name = "penrose-memory"
-version = "1.0.0"
+version = "1.1.0"
 edition = "2021"
-description = "Aperiodic memory palace for AI agents. Navigate memories by distance + direction on a Penrose floor."
+description = "Aperiodic memory palace for AI agents with tile lifecycle, simulation-first predictions, and Lamport clocks."
 license = "MIT"
 repository = "https://github.com/SuperInstance/penrose-memory"
 readme = "README.md"
