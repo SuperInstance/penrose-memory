@@ -16,7 +16,7 @@ The Fibonacci word determines tile bits (thick:thin → 1/φ). Matching rules ve
 
 ```toml
 [dependencies]
-penrose-memory = "0.1.0"
+penrose-memory = "1.0.0"
 ```
 
 Python:

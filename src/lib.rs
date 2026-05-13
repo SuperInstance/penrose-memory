@@ -42,6 +42,7 @@ pub struct RecallResult {
 
 /// Internal tile stored in the memory.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct Tile {
     tile_id: u64,
     content: u64,

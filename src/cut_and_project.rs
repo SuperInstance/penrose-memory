@@ -5,8 +5,11 @@
 //! lower-dimensional aperiodic tiling. The classic Penrose construction
 //! maps 5D → 2D via golden-angle rotations.
 
+#[allow(dead_code)]
 const PHI: f64 = 1.618033988749895;
+#[allow(dead_code)]
 const INV_PHI: f64 = 0.618033988749895;
+#[allow(dead_code)]
 const GOLDEN_ANGLE_RAD: f64 = 2.0 * std::f64::consts::PI / (PHI * PHI); // ≈ 2.399…
 
 /// Tile type classification.
