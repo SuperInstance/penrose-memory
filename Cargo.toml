@@ -12,4 +12,16 @@ exclude = ["/pyproject.toml", "/penrose_memory/"]
 
 [dependencies]
 
+[dev-dependencies]
+criterion = "0.5"
+rand = "0.8"
+
+[[bench]]
+name = "tensor_tile_bench"
+harness = false
+
+[[bench]]
+name = "simd_compare"
+harness = false
+
 [workspace]
