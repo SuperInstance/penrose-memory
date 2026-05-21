@@ -1,0 +1,7 @@
+LICENSE
+README.md
+pyproject.toml
+src/penrose_memory.egg-info/PKG-INFO
+src/penrose_memory.egg-info/SOURCES.txt
+src/penrose_memory.egg-info/dependency_links.txt
+src/penrose_memory.egg-info/top_level.txt
