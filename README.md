@@ -99,6 +99,19 @@ removed = pm.consolidate()
 
 **Python**: 10 tests covering the same core functionality.
 
+## The Penrose Tiling
+
+A Penrose tiling is an aperiodic tiling — it covers the plane without ever repeating. The tiles come in two shapes (kite and dart, or thick and thin rhombi) arranged according to matching rules that forbid periodic patterns. This non-repeating structure means every location in the memory palace is unique and addressable by both distance and direction, unlike a regular grid where many positions look identical.
+
+The golden ratio (φ ≈ 1.618) governs the tiling: the ratio of thick to thin tiles is φ, the Fibonacci word determines tile placement, and the consolidation hierarchy uses powers of φ as distance thresholds. This gives Penrose Memory a natural multi-scale structure — memories cluster at every scale without ever forming a rigid lattice.
+
+## Related Repos
+
+- **[plato-core](https://github.com/SuperInstance/plato-core)** — Foundation types and mesh registry
+- **[cocapn-plato](https://github.com/SuperInstance/cocapn-plato)** — PLATO integration for knowledge rooms
+- **[constraint-instrument](https://github.com/SuperInstance/constraint-instrument)** — Constraint-based music generation
+- **[tensor-spline](https://github.com/SuperInstance/tensor-spline)** — Compressed neural network layers
+
 ## License
 
 MIT
